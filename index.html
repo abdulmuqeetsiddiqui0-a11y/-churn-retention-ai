@@ -1,0 +1,183 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Churn & Retention Intelligence</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=Fraunces:opsz,wght@9..144,600&display=swap">
+<style>
+:root{--bg:#eef2f6;--panel:#fff;--ink:#1b2a3a;--mute:#5d6b7a;--line:#d8e0e8;--accent:#3d4fd1;--risk:#d9363e;--warn:#d98a1c;--ok:#1f8f7e}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.5 "IBM Plex Sans",system-ui,sans-serif}
+h1,h2{font-family:Fraunces,Georgia,serif;font-weight:600;margin:0}
+header{padding:28px 24px 8px;max-width:1200px;margin:auto}
+h1{font-size:30px}
+header p{color:var(--mute);margin:6px 0 0;max-width:70ch}
+main{max-width:1200px;margin:auto;padding:16px 24px 48px}
+.kpis{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:16px}
+.kpi{background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:14px 16px}
+.kpi b{display:block;font-size:26px;font-weight:600}
+.kpi span{color:var(--mute);font-size:13px}
+.grid{display:grid;grid-template-columns:1.4fr 1fr;gap:16px;align-items:start}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:16px}
+h2{font-size:19px;margin-bottom:10px}
+.chips{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:12px}
+.chips button{border:1px solid var(--line);background:#fff;border-radius:999px;padding:4px 12px;font:inherit;font-size:13px;cursor:pointer;color:var(--ink)}
+.chips button[aria-pressed=true]{background:var(--accent);border-color:var(--accent);color:#fff}
+.tbl{overflow-x:auto}
+table{width:100%;border-collapse:collapse;font-size:14px}
+th{text-align:left;font-weight:500;color:var(--mute);padding:6px 8px;border-bottom:1px solid var(--line)}
+td{padding:8px;border-bottom:1px solid var(--line);white-space:nowrap}
+tr.row{cursor:pointer}
+tr.row:hover,tr.row:focus{background:#f3f6fb;outline:none}
+tr.row[aria-selected=true]{background:#e8ecfb}
+.bar{display:inline-block;width:64px;height:8px;background:#e5eaf0;border-radius:4px;vertical-align:middle;margin-right:6px;overflow:hidden}
+.bar i{display:block;height:100%;border-radius:4px}
+.drv{display:grid;grid-template-columns:150px 1fr 40px;gap:8px;align-items:center;font-size:13px;margin:6px 0}
+.drv .t{height:10px;background:#e5eaf0;border-radius:5px;overflow:hidden}
+.drv .t i{display:block;height:100%;background:var(--accent)}
+.act{border-left:4px solid var(--ok);background:#eef8f6;padding:10px 12px;border-radius:0 6px 6px 0;margin:10px 0}
+.act.no{border-color:var(--mute);background:#f1f3f5}
+.msg{background:#f6f8fb;border:1px solid var(--line);border-radius:6px;padding:10px 12px;font-size:14px;white-space:pre-wrap}
+button.copy{margin-top:8px;border:1px solid var(--accent);color:var(--accent);background:#fff;border-radius:6px;padding:6px 12px;font:inherit;cursor:pointer}
+button.copy:hover{background:var(--accent);color:#fff}
+.sm{color:var(--mute);font-size:13px}
+.seg{display:flex;justify-content:space-between;gap:8px;padding:6px 0;border-bottom:1px solid var(--line);font-size:14px}
+.pill{display:inline-block;padding:1px 8px;border-radius:999px;font-size:12px;background:#e8ecfb;color:#2a3799}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+@media(max-width:900px){.kpis{grid-template-columns:repeat(2,1fr)}.grid{grid-template-columns:1fr}.drv{grid-template-columns:110px 1fr 36px}}
+</style>
+</head>
+<body>
+<header>
+  <h1>Churn &amp; Retention Intelligence</h1>
+  <p>Synthetic demo. Finds customers likely to cancel, groups them by behavior, explains why, and recommends the retention action with the best expected value.</p>
+</header>
+<main>
+  <section class="kpis" aria-label="Summary">
+    <div class="kpi"><b id="k1"></b><span>Customers at high risk</span></div>
+    <div class="kpi"><b id="k2"></b><span>Monthly revenue at risk</span></div>
+    <div class="kpi"><b id="k3"></b><span>Expected revenue saved (net of offer cost)</span></div>
+    <div class="kpi"><b id="k4"></b><span>Customers where no offer is advised</span></div>
+  </section>
+
+  <div class="grid">
+    <section class="card">
+      <h2>At-risk customers</h2>
+      <div class="chips" id="chips" role="group" aria-label="Filter by segment"></div>
+      <div class="tbl">
+        <table>
+          <thead><tr><th>Customer</th><th>Segment</th><th>Churn risk</th><th>MRR</th><th>Action</th></tr></thead>
+          <tbody id="rows"></tbody>
+        </table>
+      </div>
+    </section>
+
+    <aside class="card" id="detail" aria-live="polite"></aside>
+  </div>
+
+  <div class="grid" style="margin-top:16px">
+    <section class="card">
+      <h2>Why customers leave (all high-risk)</h2>
+      <p class="sm">Average contribution of each behavior to churn risk, as SHAP values would show.</p>
+      <div id="global"></div>
+    </section>
+    <section class="card">
+      <h2>Segments</h2>
+      <div id="segs"></div>
+    </section>
+  </div>
+</main>
+
+<script>
+// ---------- Synthetic data (seeded so it is the same on every load) ----------
+let s = 42; const rnd = () => (s = (s * 1664525 + 1013904223) % 4294967296) / 4294967296;
+const pick = a => a[Math.floor(rnd() * a.length)];
+const SEG = {
+  "Never activated":   {w:.22, risk:[.62,.9], mrr:[15,40],  drivers:{"Low usage in first 14 days":.9,"No core feature used":.8,"Late first login":.5,"Pricing page visits":.1}, act:"Guided onboarding call", cost:6,  lift:.22, why:"Never reached the first useful moment"},
+  "Fading power user": {w:.18, risk:[.55,.85], mrr:[60,140], drivers:{"Usage down 60% in 30 days":.9,"Fewer features used":.6,"Sessions per week":.5,"Competitor browsing":.2}, act:"Personal outreach + new-feature demo", cost:12, lift:.3,  why:"Strong past use, steep recent decline"},
+  "Price sensitive":   {w:.2,  risk:[.5,.8],  mrr:[25,70],  drivers:{"Pricing / cancel page visits":.9,"Recent price increase":.7,"Joined on promo":.6,"Low feature depth":.2}, act:"Annual plan or downgrade offer", cost:10, lift:.26, why:"Questioning the value for the price"},
+  "Frustrated":        {w:.18, risk:[.6,.9],  mrr:[30,100], drivers:{"Open support tickets":.9,"Negative ticket sentiment":.8,"Slow first response":.5,"NPS detractor":.6}, act:"Priority support escalation", cost:15, lift:.35, why:"Repeated problems and slow fixes"},
+  "Involuntary":       {w:.14, risk:[.55,.8], mrr:[20,60],  drivers:{"Failed payments":.95,"Card expiring":.7,"Billing emails unopened":.3}, act:"Smart payment retry + card update link", cost:1,  lift:.55, why:"Billing failure, not a decision to leave"},
+  "Lost cause":        {w:.08, risk:[.85,.97], mrr:[15,35], drivers:{"Cancel intent survey":.9,"No logins in 45 days":.8,"Competitor switch":.7}, act:null, cost:0, lift:.02, why:"Already decided; offers rarely work"}
+};
+const names = ["Aarav","Diya","Rohan","Meera","Kabir","Isha","Vikram","Ananya","Arjun","Sana","Nikhil","Priya","Dev","Kavya","Rahul","Neha","Aditya","Tara","Imran","Lakshmi"];
+const segKeys = Object.keys(SEG);
+const data = [];
+for (let i = 0; i < 48; i++) {
+  let r = rnd(), seg, acc = 0;
+  for (const k of segKeys) { acc += SEG[k].w; if (r <= acc) { seg = k; break; } }
+  seg = seg || "Lost cause";
+  const d = SEG[seg], risk = d.risk[0] + rnd() * (d.risk[1] - d.risk[0]);
+  const mrr = Math.round(d.mrr[0] + rnd() * (d.mrr[1] - d.mrr[0]));
+  const tenure = 2 + Math.floor(rnd() * 30);
+  const clv = mrr * Math.max(6, Math.round(24 - tenure * .3));
+  const drivers = Object.entries(d.drivers).map(([n, v]) => [n, Math.min(1, v * (.8 + rnd() * .4))]).sort((a, b) => b[1] - a[1]);
+  const uplift = d.act ? d.lift * (.8 + rnd() * .4) : 0;
+  const ev = d.act ? Math.round(uplift * clv - d.cost) : 0;
+  const sleeping = d.act && ev <= 0;
+  data.push({id: "C-" + (1001 + i), name: pick(names), seg, risk, mrr, tenure, clv, drivers, uplift, ev, action: sleeping ? null : d.act, cost: d.cost});
+}
+data.sort((a, b) => b.risk - a.risk);
+
+// ---------- Messages (rule-based here; an LLM would draft these in production) ----------
+const MSG = {
+  "Never activated": c => `Hi ${c.name},\n\nSetting up is the hardest part, so we'd like to do it with you. Book a free 15-minute guided setup and we'll get your first project running.\n\nNo cost and no commitment.`,
+  "Fading power user": c => `Hi ${c.name},\n\nWe noticed you've been using us less lately. We've shipped features since you last logged in that match how you work. Can I walk you through them for 10 minutes this week?`,
+  "Price sensitive": c => `Hi ${c.name},\n\nIf the plan no longer fits your budget, you have options: switch to annual billing and save, or move to a lighter plan and keep your data. Want me to set up whichever suits you?`,
+  "Frustrated": c => `Hi ${c.name},\n\nWe're sorry your issues weren't fixed quickly enough. A senior team member now owns your case, and we'll call you within one business day with a fix and a timeline.`,
+  "Involuntary": c => `Hi ${c.name},\n\nYour last payment didn't go through. Your account is safe. Update your card here and everything continues as normal.`
+};
+
+// ---------- Rendering ----------
+const $ = id => document.getElementById(id);
+const col = r => r > .8 ? "var(--risk)" : r > .65 ? "var(--warn)" : "var(--accent)";
+let filter = "All", sel = data[0];
+
+function kpis() {
+  const hi = data.filter(c => c.risk > .5);
+  $("k1").textContent = hi.length;
+  $("k2").textContent = "$" + hi.reduce((a, c) => a + c.mrr, 0).toLocaleString();
+  $("k3").textContent = "$" + data.reduce((a, c) => a + Math.max(0, c.ev), 0).toLocaleString();
+  $("k4").textContent = data.filter(c => !c.action).length;
+}
+function chips() {
+  $("chips").innerHTML = ["All", ...segKeys].map(k =>
+    `<button aria-pressed="${k === filter}" data-k="${k}">${k}</button>`).join("");
+  $("chips").onclick = e => { const k = e.target.dataset.k; if (k) { filter = k; chips(); rows(); } };
+}
+function rows() {
+  const list = data.filter(c => filter === "All" || c.seg === filter);
+  $("rows").innerHTML = list.map(c => `<tr class="row" tabindex="0" data-id="${c.id}" aria-selected="${c === sel}">
+    <td>${c.name} <span class="sm">${c.id}</span></td><td>${c.seg}</td>
+    <td><span class="bar"><i style="width:${c.risk * 100}%;background:${col(c.risk)}"></i></span>${Math.round(c.risk * 100)}%</td>
+    <td>$${c.mrr}</td><td>${c.action || '<span class="sm">No offer</span>'}</td></tr>`).join("");
+  const pickRow = el => { const tr = el.closest("tr.row"); if (tr) { sel = data.find(c => c.id === tr.dataset.id); rows(); detail(); } };
+  $("rows").onclick = e => pickRow(e.target);
+  $("rows").onkeydown = e => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); pickRow(e.target); } };
+}
+function detail() {
+  const c = sel, m = MSG[c.seg];
+  $("detail").innerHTML = `<h2>${c.name} <span class="sm">${c.id}</span></h2>
+    <p class="sm" style="margin-top:0">${c.seg}: ${SEG[c.seg].why}. Tenure ${c.tenure} months, $${c.mrr}/month, lifetime value about $${c.clv.toLocaleString()}.</p>
+    <b>Top risk drivers</b>
+    ${c.drivers.slice(0, 4).map(([n, v]) => `<div class="drv"><span>${n}</span><span class="t"><i style="width:${v * 100}%"></i></span><span class="sm">${v.toFixed(2)}</span></div>`).join("")}
+    ${c.action ? `<div class="act"><b>${c.action}</b><br><span class="sm">Estimated retention lift ${Math.round(c.uplift * 100)} points, offer cost $${c.cost}, expected net value <b>$${c.ev}</b></span></div>
+      <b>Draft message</b><div class="msg" id="msg">${m(c)}</div><button class="copy" id="copy">Copy message</button>`
+    : `<div class="act no"><b>No offer recommended</b><br><span class="sm">${c.seg === "Lost cause" ? "This customer has already decided to leave. Offers rarely change that, so spend nothing." : "Expected value is below the offer cost. Contacting this customer may not pay off."}</span></div>`}`;
+  const b = $("copy");
+  if (b) b.onclick = () => { navigator.clipboard && navigator.clipboard.writeText($("msg").textContent); b.textContent = "Copied"; setTimeout(() => b.textContent = "Copy message", 1500); };
+}
+function globals() {
+  const t = {}; data.filter(c => c.risk > .5).forEach(c => c.drivers.forEach(([n, v]) => t[n] = (t[n] || 0) + v));
+  const arr = Object.entries(t).sort((a, b) => b[1] - a[1]).slice(0, 8), mx = arr[0][1];
+  $("global").innerHTML = arr.map(([n, v]) => `<div class="drv"><span>${n}</span><span class="t"><i style="width:${v / mx * 100}%"></i></span><span class="sm">${Math.round(v / mx * 100)}</span></div>`).join("");
+  $("segs").innerHTML = segKeys.map(k => {
+    const l = data.filter(c => c.seg === k);
+    return `<div class="seg"><span>${k}</span><span class="sm">${l.length} customers, $${l.reduce((a, c) => a + c.mrr, 0).toLocaleString()}/mo</span></div>`;
+  }).join("") + `<p class="sm">Recommended actions come from uplift x lifetime value - cost. A 5-10% holdout group should receive no offer so the real impact can be measured.</p>`;
+}
+kpis(); chips(); rows(); detail(); globals();
+</script>
+</body>
+</html>
